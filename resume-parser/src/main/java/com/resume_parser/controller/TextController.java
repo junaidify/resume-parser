@@ -1,6 +1,6 @@
 package com.resume_parser.controller;
 
-import com.resume_parser.service.TextService;
+import com.resume_parser.service.TextExtractionService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -8,14 +8,14 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/parse")
 public class TextController{
-    private TextService textService;
+    private final TextExtractionService textExtractionService;
 
-    public TextController(TextService textService){
-        this.textService = textService;
+    public TextController(TextExtractionService textExtractionService){
+        this.textExtractionService = textExtractionService;
     }
 
     @PostMapping("/resume")
-    public ResponseEntity<String> parseResume(@RequestParam("file") MultipartFile file){
-        return ResponseEntity.ok(textService.)
+    public ResponseEntity<String> parseResume(@RequestParam("file") MultipartFile file, String jdText) throws Exception{
+        return ResponseEntity.ok(textExtractionService.mergeServiceToGetAtsScore(file, jdText));
     }
 }
