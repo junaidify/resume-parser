@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resume_parser.AppConfig.WebClientConfig;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
 
+@Service
 public class GroqService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
