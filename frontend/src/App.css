@@ -1,0 +1,61 @@
+.app-viewport {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.btn-reopen {
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+  transition: all 0.15s ease;
+}
+
+.btn-reopen:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.attached-summary {
+  margin-top: 20px;
+  background: #ffffff;
+  padding: 20px 24px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  max-width: 480px;
+}
+
+.attached-summary h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.attached-summary ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.attached-summary li {
+  font-size: 14px;
+  color: #334155;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.attached-summary li:last-child {
+  border-bottom: none;
+}
