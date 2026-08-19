@@ -27,7 +27,7 @@ public class TextExtractionService {
         }
 
         if (jdText == null || jdText.isBlank()) {
-            throw new IllegalArgumentException("Job description text must not be empty.");
+            throw new IllegalArgumentException("Job description (jdText) is required to evaluate ATS score.");
         }
 
         String fileName = file.getOriginalFilename();
@@ -58,5 +58,9 @@ public class TextExtractionService {
             log.error("Error evaluating ATS score via Groq API", e);
             throw new RuntimeException("Failed to evaluate ATS score: " + e.getMessage(), e);
         }
+    }
+
+    public java.util.Map<String, Object> checkApiStatus() {
+        return groqService.verifyApiKeyStatus();
     }
 }

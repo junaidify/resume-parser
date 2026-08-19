@@ -1,11 +1,11 @@
-import type { EnvironmentConfig, UploadFileItem } from '../types/upload';
+import type { AtsResult, EnvironmentConfig, UploadFileItem } from '../types/upload';
 
 // Read configuration from environment variables (.env)
 export const envConfig: EnvironmentConfig = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1',
-  uploadEndpoint: import.meta.env.VITE_UPLOAD_ENDPOINT || '/resumes/upload',
-  maxFileSizeMB: Number(import.meta.env.VITE_MAX_FILE_SIZE_MB) || 25,
-  allowedFileTypes: (import.meta.env.VITE_ALLOWED_FILE_TYPES || '.pdf,.doc,.docx,.png,.jpg,.jpeg,.fig,.ae,.ai')
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081',
+  uploadEndpoint: import.meta.env.VITE_UPLOAD_ENDPOINT || '/parse/resume',
+  maxFileSizeMB: Number(import.meta.env.VITE_MAX_FILE_SIZE_MB) || 10,
+  allowedFileTypes: (import.meta.env.VITE_ALLOWED_FILE_TYPES || '.pdf,.doc,.docx')
     .split(',')
     .map((t: string) => t.trim().toLowerCase()),
   apiKey: import.meta.env.VITE_API_KEY || '',
@@ -68,7 +68,7 @@ export function uploadFileToBackend(
     } else {
       onProgress(fileItem.id, progress, 'Uploading...');
     }
-  }, 200);
+  }, 100);
 
   return () => {
     isCancelled = true;
@@ -77,18 +77,27 @@ export function uploadFileToBackend(
 }
 
 /**
- * Sends the uploaded resume to the backend API endpoint (.env VITE_API_BASE_URL)
+ * Sends the uploaded resume and job description to the Spring Boot backend API
  */
-export async function sendResumeToBackend(fileItem: UploadFileItem): Promise<{ success: boolean; data?: unknown; error?: string }> {
+export async function sendResumeToBackend(
+  fileItem: UploadFileItem,
+  jdText: string
+): Promise<{ success: boolean; data?: AtsResult; error?: string }> {
   const targetUrl = `${envConfig.apiBaseUrl}${envConfig.uploadEndpoint}`;
 
   try {
-    const formData = new FormData();
-    if (fileItem.fileObj) {
-      formData.append('resume', fileItem.fileObj);
-    } else {
-      formData.append('filename', fileItem.name);
+    if (!fileItem.fileObj) {
+      throw new Error('No valid document file provided.');
     }
+
+    const actualJdText = jdText ? jdText.trim() : '';
+    if (!actualJdText) {
+      throw new Error('Please enter a Job Description (JD) to evaluate ATS match score.');
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileItem.fileObj);
+    formData.append('jdText', actualJdText);
 
     const headers: Record<string, string> = {};
     if (envConfig.apiKey) {
@@ -101,24 +110,30 @@ export async function sendResumeToBackend(fileItem: UploadFileItem): Promise<{ s
       body: formData,
     });
 
+    const responseData = await response.json().catch(() => null);
+
     if (!response.ok) {
-      throw new Error(`Server HTTP ${response.status}: ${response.statusText}`);
+      const errorMsg =
+        responseData?.message ||
+        responseData?.error ||
+        `Server error: HTTP ${response.status} (${response.statusText})`;
+      throw new Error(errorMsg);
     }
 
-    const data = await response.json();
-    return { success: true, data };
+    // Spring returns either parsed JSON object or stringified JSON
+    const parsedData: AtsResult =
+      typeof responseData === 'string' ? JSON.parse(responseData) : responseData;
+
+    return { success: true, data: parsedData };
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Upload failed';
-    console.info(`Attempted POST to ${targetUrl}: ${errorMsg}. Falling back to simulated successful backend response for local testing.`);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    let errorMsg = err instanceof Error ? err.message : 'Upload and ATS evaluation failed';
+    if (errorMsg === 'Failed to fetch' || errorMsg.includes('NetworkError') || errorMsg.includes('Load failed')) {
+      errorMsg = `Cannot connect to Backend API at ${targetUrl}. Please ensure Spring Boot is running (port 8081). Run: cd resume-parser && ./gradlew bootRun`;
+    }
+    console.error(`Error sending resume to ${targetUrl}:`, err);
     return {
-      success: true,
-      data: {
-        message: 'Resume successfully sent to backend API',
-        endpoint: targetUrl,
-        filename: fileItem.name,
-        timestamp: new Date().toISOString(),
-      },
+      success: false,
+      error: errorMsg,
     };
   }
 }

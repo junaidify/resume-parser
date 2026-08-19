@@ -1,0 +1,36 @@
+﻿# Environment Variables and Secrets
+.env
+.env.*
+*.env
+*.local
+
+# Node / Frontend
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Java / Gradle
+.gradle/
+build/
+bin/
+out/
+target/
+*.class
+*.jar
+*.war
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+Thumbs.db
+
+# Misc & Local Assets
+*.log
+image.png
