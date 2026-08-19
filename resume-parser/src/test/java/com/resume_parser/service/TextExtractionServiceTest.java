@@ -83,4 +83,26 @@ class TextExtractionServiceTest {
 
         assertTrue(exception.getMessage().contains("empty or missing"));
     }
+
+    @Test
+    void testMergeServiceWithEmptyJdThrowsException() {
+        MockMultipartFile file = new MockMultipartFile("file", "resume.pdf", "application/pdf", "Sample Content".getBytes());
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> textExtractionService.mergeServiceToGetAtsScore(file, "")
+        );
+
+        assertTrue(exception.getMessage().contains("Job description (jdText) is required"));
+    }
+
+    @Test
+    void testCheckApiStatus() {
+        when(groqService.verifyApiKeyStatus()).thenReturn(java.util.Map.of("apiKeyConfigured", false, "status", "NOT_CONFIGURED"));
+
+        java.util.Map<String, Object> status = textExtractionService.checkApiStatus();
+
+        assertNotNull(status);
+        assertEquals("NOT_CONFIGURED", status.get("status"));
+    }
 }

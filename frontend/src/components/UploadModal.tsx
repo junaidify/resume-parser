@@ -10,45 +10,26 @@ interface UploadModalProps {
 
 export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAttach }) => {
   const [files, setFiles] = useState<UploadFileItem[]>([]);
+  const [jdText, setJdText] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [activeUploads, setActiveUploads] = useState<{ [key: string]: () => void }>({});
   const [previewFile, setPreviewFile] = useState<UploadFileItem | null>(null);
+  const [selectedResultFile, setSelectedResultFile] = useState<UploadFileItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const filesRef = useRef(files);
+  filesRef.current = files;
+
+  // Clean up object URLs on unmount
   useEffect(() => {
-    if (!isOpen) return;
-
-    files.forEach((file) => {
-      if (file.status === 'uploading' && !activeUploads[file.id]) {
-        const cancelFn = uploadFileToBackend(
-          file,
-          (id, progress, timeLeft) => {
-            setFiles((prev) =>
-              prev.map((f) => (f.id === id ? { ...f, progress, timeLeft } : f))
-            );
-          },
-          (id) => {
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === id
-                  ? { ...f, progress: 100, timeLeft: 'Completed', status: 'completed', backendStatus: 'idle' }
-                  : f
-              )
-            );
-          },
-          (id, errorMsg) => {
-            setFiles((prev) =>
-              prev.map((f) =>
-                f.id === id ? { ...f, status: 'error', errorMessage: errorMsg } : f
-              )
-            );
-          }
-        );
-
-        setActiveUploads((prev) => ({ ...prev, [file.id]: cancelFn }));
-      }
-    });
-  }, [isOpen]);
+    return () => {
+      filesRef.current.forEach((file) => {
+        if (file.objectUrl) {
+          URL.revokeObjectURL(file.objectUrl);
+        }
+      });
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -146,13 +127,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
     const targetFile = files.find((f) => f.id === fileId);
     if (!targetFile) return;
 
+    if (!jdText.trim()) {
+      alert('Please enter a Job Description before evaluating ATS Score.');
+      return;
+    }
+
     setFiles((prev) =>
-      prev.map((f) => (f.id === fileId ? { ...f, backendStatus: 'sending' } : f))
+      prev.map((f) =>
+        f.id === fileId
+          ? { ...f, backendStatus: 'sending', errorMessage: undefined }
+          : f
+      )
     );
 
-    const result = await sendResumeToBackend(targetFile);
+    const result = await sendResumeToBackend(targetFile, jdText);
 
-    if (result.success) {
+    if (result.success && result.data) {
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId
@@ -160,11 +150,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
             : f
         )
       );
+      // Automatically show evaluation details
+      setSelectedResultFile({
+        ...targetFile,
+        backendStatus: 'sent',
+        backendResponse: result.data,
+      });
     } else {
       setFiles((prev) =>
         prev.map((f) =>
           f.id === fileId
-            ? { ...f, backendStatus: 'error', errorMessage: result.error }
+            ? { ...f, backendStatus: 'error', errorMessage: result.error || 'Failed to process resume' }
             : f
         )
       );
@@ -172,6 +168,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
   };
 
   const handleCancelFile = (fileId: string) => {
+    const target = files.find((f) => f.id === fileId);
+    if (target?.objectUrl) {
+      URL.revokeObjectURL(target.objectUrl);
+    }
     if (activeUploads[fileId]) {
       activeUploads[fileId]();
     }
@@ -179,6 +179,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
   };
 
   const handleRemoveFile = (fileId: string) => {
+    const target = files.find((f) => f.id === fileId);
+    if (target?.objectUrl) {
+      URL.revokeObjectURL(target.objectUrl);
+    }
+    if (selectedResultFile?.id === fileId) {
+      setSelectedResultFile(null);
+    }
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
@@ -217,8 +224,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
         {/* Header */}
         <div className="modal-header">
           <div className="header-text-group">
-            <h2 className="modal-title">Upload and attach files</h2>
-            <p className="modal-subtitle">Upload your resume to preview or process with the backend.</p>
+            <h2 className="modal-title">Resume Parser & ATS Evaluator</h2>
+            <p className="modal-subtitle">Upload your resume to extract skills and evaluate ATS match against your Target Job Description.</p>
           </div>
           <button className="close-btn" onClick={onClose} aria-label="Close modal">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -226,6 +233,28 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
+        </div>
+
+        {/* Job Description Input Section */}
+        <div className="jd-section">
+          <div className="jd-header">
+            <label htmlFor="jd-input" className="jd-label">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              Target Job Description (JD):
+            </label>
+            <span className="jd-hint">Required for ATS Match Scoring</span>
+          </div>
+          <textarea
+            id="jd-input"
+            rows={3}
+            value={jdText}
+            onChange={(e) => setJdText(e.target.value)}
+            placeholder="Paste the job description or required skills here..."
+            className="jd-textarea"
+          />
         </div>
 
         {/* Drag and Drop Zone */}
@@ -261,7 +290,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                 <span className="click-to-upload">Click to Upload Resume</span> or drag and drop
               </span>
               <span className="max-size-hint">
-                (Max. File size: {envConfig.maxFileSizeMB} MB)
+                Supported: PDF, DOCX, DOC (Max: {envConfig.maxFileSizeMB} MB)
               </span>
             </div>
           </div>
@@ -283,7 +312,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
             {files.map((file) => (
               <div
                 key={file.id}
-                className={`file-card ${file.status === 'error' ? 'error-card' : ''}`}
+                className={`file-card ${file.status === 'error' || file.backendStatus === 'error' ? 'error-card' : ''}`}
               >
                 <div className="file-card-top">
                   <div className="file-info-group">
@@ -294,10 +323,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                       </span>
                       <span className="file-details">
                         {file.size} •{' '}
-                        {file.status === 'error' ? (
+                        {file.errorMessage ? (
                           <span className="error-text">{file.errorMessage}</span>
+                        ) : file.status === 'completed' ? (
+                          file.backendStatus === 'sent' ? (
+                            <span className="success-text">
+                              ATS Evaluated: Score {file.backendResponse?.ats_score ?? 'N/A'}%
+                            </span>
+                          ) : (
+                            'Ready to evaluate'
+                          )
                         ) : (
-                          file.status === 'completed' ? 'Uploaded' : file.timeLeft
+                          file.timeLeft
                         )}
                       </span>
                     </div>
@@ -344,10 +381,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                   </div>
                 )}
 
-                {/* Flow Step: Two Options after uploading */}
+                {/* Flow Step: Action Buttons after uploading */}
                 {file.status === 'completed' && (
                   <div className="resume-flow-options">
-                    {/* Option 1: Open Resume */}
+                    {/* Option 1: Open/Preview Resume */}
                     <button
                       type="button"
                       className="btn-flow-open"
@@ -358,10 +395,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                         <polyline points="15 3 21 3 21 9" />
                         <line x1="10" y1="14" x2="21" y2="3" />
                       </svg>
-                      Open Resume
+                      Open Document
                     </button>
 
-                    {/* Option 2: Send to Backend */}
+                    {/* Option 2: Send to Backend ATS Engine */}
                     <button
                       type="button"
                       className={`btn-flow-backend ${file.backendStatus === 'sent' ? 'sent' : ''}`}
@@ -371,14 +408,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                       {file.backendStatus === 'sending' ? (
                         <>
                           <span className="spinner" />
-                          Sending...
+                          Evaluating ATS...
                         </>
                       ) : file.backendStatus === 'sent' ? (
                         <>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
-                          Sent to Backend
+                          Re-evaluate
                         </>
                       ) : (
                         <>
@@ -386,10 +423,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
                             <line x1="22" y1="2" x2="11" y2="13" />
                             <polygon points="22 2 15 22 11 13 2 9 22 2" />
                           </svg>
-                          Send to Backend
+                          Evaluate ATS Match
                         </>
                       )}
                     </button>
+
+                    {/* Option 3: View ATS Results */}
+                    {file.backendResponse && (
+                      <button
+                        type="button"
+                        className="btn-flow-results"
+                        onClick={() => setSelectedResultFile(file)}
+                      >
+                        📊 View Breakdown ({file.backendResponse.ats_score ?? 0}%)
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -408,18 +456,181 @@ export const UploadModal: React.FC<UploadModalProps> = ({ isOpen, onClose, onAtt
             onClick={handleAttachSubmit}
             disabled={files.length === 0}
           >
-            Done
+            Done ({files.length})
           </button>
         </div>
       </div>
 
-      {/* Internal Preview Overlay if opened inside app */}
+      {/* ATS Score Result Modal Overlay */}
+      {selectedResultFile?.backendResponse && (
+        <div className="preview-overlay" onClick={() => setSelectedResultFile(null)}>
+          <div className="ats-result-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preview-header">
+              <div className="ats-header-title">
+                <h3>ATS Match Analysis</h3>
+                <span className="ats-filename">{selectedResultFile.name}</span>
+              </div>
+              <button className="close-btn" onClick={() => setSelectedResultFile(null)}>✕</button>
+            </div>
+            
+            <div className="ats-modal-body">
+              {/* Score Display Card */}
+              <div className="ats-score-banner">
+                <div className="score-circle">
+                  <span className="score-value">
+                    {selectedResultFile.backendResponse.ats_score ?? 0}%
+                  </span>
+                  <span className="score-sublabel">Match Score</span>
+                </div>
+                <div className="score-summary-text">
+                  <h4>
+                    {(selectedResultFile.backendResponse.ats_score ?? 0) >= 75
+                      ? '🎯 Strong Match for this Role!'
+                      : (selectedResultFile.backendResponse.ats_score ?? 0) >= 50
+                      ? '⚡ Moderate Match'
+                      : '⚠️ Low Match / Missing Key Requirements'}
+                  </h4>
+                  {selectedResultFile.backendResponse.matched_required !== undefined && (
+                    <p>
+                      Matched <strong>{selectedResultFile.backendResponse.matched_required.length}</strong> of{' '}
+                      <strong>
+                        {(selectedResultFile.backendResponse.matched_required.length) +
+                          (selectedResultFile.backendResponse.missing_required?.length || 0)}
+                      </strong> required skills
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Experience Comparison Card */}
+              <div className="experience-comparison-card">
+                <div className="exp-item">
+                  <span className="exp-label">💼 JD Required Experience:</span>
+                  <span className="exp-badge exp-required">
+                    {selectedResultFile.backendResponse.required_experience &&
+                    selectedResultFile.backendResponse.required_experience !== 'Not specified' &&
+                    selectedResultFile.backendResponse.required_experience !== '0'
+                      ? selectedResultFile.backendResponse.required_experience
+                      : selectedResultFile.backendResponse.jd_experience_years && selectedResultFile.backendResponse.jd_experience_years > 0
+                      ? `${selectedResultFile.backendResponse.jd_experience_years}+ Years`
+                      : '0 Years'}
+                  </span>
+                </div>
+                <div className="exp-item">
+                  <span className="exp-label">👤 Candidate Experience:</span>
+                  <span className="exp-badge exp-resume">
+                    {selectedResultFile.backendResponse.resume_experience &&
+                    selectedResultFile.backendResponse.resume_experience !== 'Extracted from profile' &&
+                    selectedResultFile.backendResponse.resume_experience !== '0'
+                      ? selectedResultFile.backendResponse.resume_experience
+                      : '0 Years'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Skills Breakdown Grid */}
+              <div className="skills-breakdown-grid">
+                {/* Matched Required Skills */}
+                <div className="skill-category-card matched">
+                  <h5>
+                    ✅ Matched Required Skills (
+                    {selectedResultFile.backendResponse.matched_required?.length || 0})
+                  </h5>
+                  <div className="skill-tags">
+                    {selectedResultFile.backendResponse.matched_required?.length ? (
+                      selectedResultFile.backendResponse.matched_required.map((skill, i) => (
+                        <span key={i} className="tag tag-matched">{skill}</span>
+                      ))
+                    ) : (
+                      <span className="empty-tag-hint">No direct required matches found</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Missing Required Skills */}
+                <div className="skill-category-card missing">
+                  <h5>
+                    ❌ Missing Required Skills (
+                    {selectedResultFile.backendResponse.missing_required?.length || 0})
+                  </h5>
+                  <div className="skill-tags">
+                    {selectedResultFile.backendResponse.missing_required?.length ? (
+                      selectedResultFile.backendResponse.missing_required.map((skill, i) => (
+                        <span key={i} className="tag tag-missing">{skill}</span>
+                      ))
+                    ) : (
+                      <span className="empty-tag-hint">None! All required skills matched! 🎉</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Matched Preferred Skills */}
+                <div className="skill-category-card preferred">
+                  <h5>
+                    ⭐ Matched Preferred Skills (
+                    {selectedResultFile.backendResponse.matched_preferred?.length || 0})
+                  </h5>
+                  <div className="skill-tags">
+                    {selectedResultFile.backendResponse.matched_preferred?.length ? (
+                      selectedResultFile.backendResponse.matched_preferred.map((skill, i) => (
+                        <span key={i} className="tag tag-preferred">{skill}</span>
+                      ))
+                    ) : (
+                      <span className="empty-tag-hint">No preferred skills matched</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Missing Preferred Skills */}
+                <div className="skill-category-card missing-pref">
+                  <h5>
+                    💡 Missing Preferred Skills (
+                    {selectedResultFile.backendResponse.missing_preferred?.length || 0})
+                  </h5>
+                  <div className="skill-tags">
+                    {selectedResultFile.backendResponse.missing_preferred?.length ? (
+                      selectedResultFile.backendResponse.missing_preferred.map((skill, i) => (
+                        <span key={i} className="tag tag-missing-pref">{skill}</span>
+                      ))
+                    ) : (
+                      <span className="empty-tag-hint">None</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* All Detected Resume Skills */}
+                {selectedResultFile.backendResponse.resume_skills && selectedResultFile.backendResponse.resume_skills.length > 0 && (
+                  <div className="skill-category-card resume-all-skills">
+                    <h5>
+                      📄 All Detected Resume Skills (
+                      {selectedResultFile.backendResponse.resume_skills.length})
+                    </h5>
+                    <div className="skill-tags">
+                      {selectedResultFile.backendResponse.resume_skills.map((skill, i) => (
+                        <span key={i} className="tag tag-detected">{skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="preview-footer">
+              <button className="btn-attach" onClick={() => setSelectedResultFile(null)}>
+                Close Breakdown
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Internal Document Preview Overlay */}
       {previewFile && (
         <div className="preview-overlay" onClick={() => setPreviewFile(null)}>
           <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
             <div className="preview-header">
               <h3>{previewFile.name}</h3>
-              <button onClick={() => setPreviewFile(null)}>✕</button>
+              <button className="close-btn" onClick={() => setPreviewFile(null)}>✕</button>
             </div>
             <div className="preview-body">
               <p>Previewing: <strong>{previewFile.name}</strong> ({previewFile.size})</p>

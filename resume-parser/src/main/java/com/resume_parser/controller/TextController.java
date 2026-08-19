@@ -6,6 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/parse")
 public class TextController {
@@ -17,9 +19,15 @@ public class TextController {
     }
 
     @PostMapping(value = "/resume", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> parseResume(@RequestParam("file") MultipartFile file,
-                                              @RequestParam("jdText") String jdText) throws Exception {
+    public ResponseEntity<String> parseResume(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "jdText", required = false, defaultValue = "") String jdText) throws Exception {
         String result = textExtractionService.mergeServiceToGetAtsScore(file, jdText);
         return ResponseEntity.ok(result);
     }
-}
+
+    @GetMapping(value = "/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> getApiStatus() {
+        return ResponseEntity.ok(textExtractionService.checkApiStatus());
+    }
+}

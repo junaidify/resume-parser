@@ -4,6 +4,20 @@ export type FileStatus = 'uploading' | 'completed' | 'error';
 
 export type BackendStatus = 'idle' | 'sending' | 'sent' | 'error';
 
+export interface AtsResult {
+  jd_required_skills?: string[];
+  jd_preferred_skills?: string[];
+  jd_experience_years?: number;
+  required_experience?: string;
+  resume_experience?: string;
+  resume_skills?: string[];
+  matched_required?: string[];
+  matched_preferred?: string[];
+  missing_required?: string[];
+  missing_preferred?: string[];
+  ats_score?: number;
+}
+
 export interface UploadFileItem {
   id: string;
   name: string;
@@ -14,7 +28,7 @@ export interface UploadFileItem {
   timeLeft: string;
   status: FileStatus;
   backendStatus?: BackendStatus;
-  backendResponse?: unknown;
+  backendResponse?: AtsResult;
   errorMessage?: string;
   fileObj?: File;
   objectUrl?: string;
